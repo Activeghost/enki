@@ -1,0 +1,26 @@
+(defproject enki "0.1.0-SNAPSHOT"
+  :description "A kafka streams processor"
+  :url "http://example.com/FIXME"
+  :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
+            :url  "https://www.eclipse.org/legal/epl-2.0/"}
+  :dependencies [
+                 [expound "0.7.2"]                          ;; https://github.com/bhb/expound  ...for nice spec messages
+                 [org.apache.kafka/kafka-streams "2.1.0"]   ;; https://search.maven.org/artifact/org.apache.kafka/kafka-streams/2.1.0/jar
+                 [org.apache.kafka/kafka-streams-test-utils "2.1.0"] ;; https://mvnrepository.com/artifact/org.apache.kafka/kafka-streams-test-utils
+                 [org.apache.kafka/kafka-clients "2.1.0"]   ;; https://mvnrepository.com/artifact/org.apache.kafka/kafka-clients
+                 [org.apache.kafka/kafka-clients "1.1.0" :classifier "test"]
+                 [org.clojure/core.async "0.4.490"]         ;; https://github.com/clojure/core.async
+                 [org.clojure/clojure "1.9.0"]
+                 [org.clojure/tools.logging "0.5.0-alpha"]  ;; https://search.maven.org/artifact/org.clojure/tools.logging/0.5.0-alpha/jar
+                 [org.slf4j/slf4j-log4j12 "1.7.1"]          ;; 
+                 ]
+
+  :monkeypatch-clojure-test false
+  :profiles {:cloverage {:plugins   [[lein-cloverage "1.0.13"]]
+                         :cloverage {:test-ns-regex [#"^((?!(e2e|integration_tests)).)*$"]}}
+             :dev       {:dependencies [[org.clojure/test.check "0.9.0"]]}
+             :uberjar   {:aot :all}}
+  :repl-options {:init-ns enki.core}
+  :resource-paths ["resources"]
+  :target-path "target/%s"
+  )
