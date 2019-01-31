@@ -6,7 +6,7 @@ A simple kafka streams processor library
 # Installation
 Using Leiningen / Clojars:
 
-[![Clojars Project](http://clojars.org/chrisle/enki/latest-version.svg)](http://clojars.org/chrisle/enki)
+[![Clojars Project](https://img.shields.io/clojars/v/enki.svg)](https://clojars.org/enki)
 
 ## Usage
  
