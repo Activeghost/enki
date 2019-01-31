@@ -3,33 +3,25 @@
 A simple kafka streams processor library
 
 ## Installation
+# Installation
+Using Leiningen / Clojars:
 
-Download from http://example.com/FIXME.
+[![Clojars Project](http://clojars.org/chrisle/enki/latest-version.svg)](http://clojars.org/chrisle/enki)
 
 ## Usage
-Add your configuration 
+ 
 Include this library in your application and create a callback function with a single arity in the form of:
 
 (defn fn [kv-pair-map] ...) 
 
 Where the kv-pair-map has the form {:key key :record value} for whatever keys and values you are processing.
 
-
-## Examples
-
-...
-
 ### Bugs
 
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
 
 ## License
 
-Copyright © 2019 FIXME
+Copyright © 2019 Christopher Lester
 
 This program and the accompanying materials are made available under the
 terms of the Eclipse Public License 2.0 which is available at
