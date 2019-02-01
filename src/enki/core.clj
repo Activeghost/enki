@@ -1,8 +1,7 @@
 (ns enki.core
   ;; IMPORTANT: Make sure that advertised listeners is uncommented in your server properties
   (:gen-class)
-  (:require [clojure.core.async :as async :refer [>! <! >!! <!! go chan buffer close! thread alts! alts!! timeout]]
-            [clojure.core]
+  (:require [clojure.core]
             [clojure.edn :as edn]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
@@ -29,7 +28,7 @@
 
 ;; TODO add regex constrations to input/output topics to enforce naming schema and possibly constrain commit interval
 (s/def ::applicationid ::significant-string)
-(s/def ::auto.commit.interval.ms int?)
+(s/def ::punctuate.interval.ms int?)
 (s/def ::bootstrap-servers-by-ip #(re-matches ip-regex %))
 (s/def ::bootstrap-servers-by-hostname #(re-matches hostname-regex %))
 (s/def ::bootstrap-servers (s/and string?
@@ -37,8 +36,7 @@
 (s/def ::input-topic ::significant-string)
 (s/def ::output-topic ::significant-string)
 (s/def ::store-name ::significant-string)
-(s/def ::kafka-configuration (s/keys :req-un [::applicationid ::auto.commit.interval.ms ::bootstrap-servers ::input-topic ::output-topic ::store-name]
-                                     :opt [::replication-factor ::partitions]) )
+(s/def ::kafka-configuration (s/keys :req-un [::applicationid ::bootstrap-servers ::input-topic ::output-topic ::punctuate.interval.ms ::store-name]) )
 
 ;;
 ;; CONSTANTS
@@ -56,6 +54,21 @@
 ;;
 ;; STREAM PROCESSING
 ;;
+(defn get-kafka-config
+  "Get the kafka configuration"
+  []
+  (let [maybe-correct-config  @streams-config
+        kafka-config      (s/conform ::kafka-configuration maybe-correct-config)]
+    (when (= ::s/invalid kafka-config)
+      (do
+        (e/expound ::kafka-configuration maybe-correct-config)
+        (throw (ex-info "The configuration provided did not match spec." (s/explain-data ::kafka-configuration maybe-correct-config)))))
+    kafka-config))
+
+(defn state-store->put
+  [key value]
+  )
+
 (defn punctuator-forward-message
   [timestamp kvstore context]
   (reify
@@ -71,7 +84,7 @@
 
   (let [store     (atom {})
         context   (atom nil)
-        timestamp 5000]
+        timestamp (:punctuate.interval.ms (get-kafka-config))]
 
     ;; Reify the Processor to override (substituting our own behavior) some of it's behavior
     (reify Processor
@@ -90,13 +103,17 @@
 
       (process [_ key record]
         "called on each of the received records"
-        (log/infof "[the-processor::process] Process has been called with key: %s record: %s" key record)
+        (log/infof "[the-processor::process] key: %s record: %s" key record)
 
         (try 
-          (let [processed-kv-pair (client-processor-callback {:key    key
-                                                              :record record})]
-            (log/infof "[the-processor::process] callback result: %s" processed-kv-pair)
-            (.put @store (:key processed-kv-pair) (:value processed-kv-pair)))
+          (client-processor-callback {:key    key
+                                      :producer-record record}
+                                     (fn [key] 
+                                       (log/debugf "[anon-store-getter] getting key: '%s' from state store" key)
+                                       (.get @store key))
+                                     (fn [key value] 
+                                       (log/debugf "[anon-store-put] putting key:'%s' value: '%s' into state store" key value)
+                                       (.put @store key value)))
           (catch Exception ex (log/error ex)))))))
 
 (defn processor-supplier
@@ -107,18 +124,10 @@
 
 ;; TODO: Integrate avro key/value serialization and deserialization and schema registry access.
 (defn the-topology
-  "build the stream processing topology. See https://kafka.apache.org/11/documentation/streams/developer-guide/PROCESSOR-api.html#streams-developer-guide-state-store"
+  "build the stream processing topology. See https://kafka.apache.org/11/documentation/streams/developer-guide/processor-api.html#streams-developer-guide-state-store"
   [client-processor-callback]
   (log/info "[the-topology] Configuring topology")
-  (let [maybe-correct-config  @streams-config
-        kafka-config      (s/conform ::kafka-configuration maybe-correct-config)]
-    (if (= ::s/invalid kafka-config)
-      (do
-        (e/expound ::kafka-configuration maybe-correct-config)
-        (throw (ex-info "The configuration provided did not match spec." (s/explain-data ::kafka-configuration maybe-correct-config))))
-      (do
-        (log/info "[the-topology] Configuration: " kafka-config)))
-    
+  (let [kafka-config      (get-kafka-config)]
     (let [ input-topic (s/conform ::input-topic (:input-topic kafka-config))
           output-topic (s/conform ::output-topic (:output-topic kafka-config))
           builder    (Topology.)
@@ -145,28 +154,26 @@
 ;;
 ;; STREAM CONFIG AND LIFECYCLE
 ;;
-
 (defn start->streams
   [client-processor-callback kafka-config]
   {:pre [(s/valid? ::kafka-configuration kafka-config)]}
   (log/info "[start->streams] Starting streams using client configuration: " kafka-config)
 
   (when (not (instance? KafkaStreams (:streams @state)))
-    (do (swap! streams-config conj kafka-config)
-        (let [kafka-config            (s/conform ::kafka-configuration @streams-config)
-          stream-processing-props {StreamsConfig/APPLICATION_ID_CONFIG            (:applicationid kafka-config)
-                                   StreamsConfig/COMMIT_INTERVAL_MS_CONFIG        (:auto.commit.interval.ms kafka-config)
-                                   StreamsConfig/BOOTSTRAP_SERVERS_CONFIG         (:bootstrap-servers kafka-config)
-                                   StreamsConfig/DEFAULT_KEY_SERDE_CLASS_CONFIG   (.getName (.getClass (Serdes/String)))
-                                   StreamsConfig/DEFAULT_VALUE_SERDE_CLASS_CONFIG (.getName (.getClass (Serdes/String)))
-                                   StreamsConfig/PROCESSING_GUARANTEE_CONFIG      StreamsConfig/EXACTLY_ONCE}]
       (try
-        (log/debugf "[start->streams] creating kafka stream with StreamsConfig: %s" stream-processing-props)
-        (dosync
-         (alter state conj (-> {:streams (KafkaStreams. (the-topology client-processor-callback) (StreamsConfig. stream-processing-props))})))
-        (log/infof "[start->streams] streams instance created")
-
-        (catch Exception e (log/error e))))))
+        ;; if we get to a place where we can restart the kafka streams from a stopped state then move this outside in case clients pass new configs.
+        (do (swap! streams-config conj kafka-config)
+            (let [kafka-config            (get-kafka-config)
+                  stream-processing-props {StreamsConfig/APPLICATION_ID_CONFIG            (:applicationid kafka-config)
+                                           StreamsConfig/BOOTSTRAP_SERVERS_CONFIG         (:bootstrap-servers kafka-config)
+                                           StreamsConfig/DEFAULT_KEY_SERDE_CLASS_CONFIG   (.getName (.getClass (Serdes/String)))
+                                           StreamsConfig/DEFAULT_VALUE_SERDE_CLASS_CONFIG (.getName (.getClass (Serdes/String)))
+                                           StreamsConfig/PROCESSING_GUARANTEE_CONFIG      StreamsConfig/EXACTLY_ONCE}]
+              (log/debugf "[start->streams] creating kafka stream with StreamsConfig: %s" stream-processing-props)
+              (dosync
+               (alter state conj (-> {:streams (KafkaStreams. (the-topology client-processor-callback) (StreamsConfig. stream-processing-props))})))
+              (log/infof "[start->streams] streams instance created")))
+        (catch Exception e (log/error e))))
   (let [streams      (:streams @state)
         stream-state (.state streams)]
     (if (= stream-state "CREATED")
@@ -189,3 +196,4 @@
      (when (not (nil?  (:streams @state))) (close->streams))
      (log/info "Bye!")
      (flush))))
+    
