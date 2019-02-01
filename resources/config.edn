@@ -1,8 +1,0 @@
-{;; kafka configuration
- :kduce.config/kafka-configuration {:applicationid           "open-calais-tagging-microservice"
-                                    :bootstrap-servers       "BUCEPHALAS:9092"
-                                    :auto.commit.interval.ms 10000 ;; milliseconds
-                                    :input-topic             "db.draft.created"
-                                    :output-topic            "streaming.calais.response"
-                                    :store-name              "TheStore"}
- }
