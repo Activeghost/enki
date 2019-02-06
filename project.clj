@@ -20,7 +20,17 @@
                          :cloverage {:test-ns-regex [#"^((?!(e2e|integration_tests)).)*$"]}}
              :dev       {:dependencies [[org.clojure/test.check "0.9.0"]]}
              :uberjar   {:aot :all}}
-  :repl-options {:init-ns enki.core}
+    :repl-options {:init (do
+                           (require '[enki.core :refer :all])
+                           (require '[clojure.repl :refer :all])
+                           (require '[clojure.pprint :as pp])
+                           (require '[clojure.spec.alpha      :as s])
+                           (require '[clojure.spec.gen.alpha :as gen])
+                           (require '[clojure.spec.test.alpha :as stest])
+                           (require '[expound.alpha :as e])
+                           (require '[clojure.java.javadoc :as jdoc])
+                           (require '[clojure.inspector :as insp])
+                           (require '[clojure.reflect :as reflect]))}
   :resource-paths ["resources"]
   :target-path "target/%s"
   )
