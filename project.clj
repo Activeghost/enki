@@ -1,4 +1,4 @@
-(defproject enki "0.1.2-SNAPSHOT"
+(defproject enki "0.1.3-SNAPSHOT"
   :description "A kafka streams processor"
   :url "https://github.com/Activeghost/enki"
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"

@@ -176,10 +176,9 @@
         (catch Exception e (log/error e))))
   (let [streams      (:streams @state)
         stream-state (.state streams)]
-    (if (= stream-state "CREATED")
-      (do (log/info "[start->streams] KafkaStreams instance started.") 
-          (.start (:streams @state)))
-      (log/warnf "[start->streams] KafkaStreams is not in a valid state to attempt starting. State: %s" stream-state))))
+    (log/infof "[start->streams] streams instance state before attempting to start: %s" stream-state)
+    (do (.start (:streams @state))
+        (log/info "[start->streams] KafkaStreams instance started."))))
 
 (defn close->streams
   []
